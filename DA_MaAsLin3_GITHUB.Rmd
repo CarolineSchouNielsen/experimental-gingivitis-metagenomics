@@ -1,0 +1,461 @@
+---
+title: "Differential abundance analyses with MaAsLin3 for published article"
+subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
+author: "Caroline Schou Nielsen"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document: 
+    toc: yes
+    keep_md: no
+---
+
+```{r setup}
+rm(list = ls())
+gc()
+# invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
+# options(java.parameters = "-Xmx80000m")
+```
+
+```{r setup2}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+##knitr::opts_chunk$set(cache=TRUE)
+##knitr::opts_chunk$set(echo = TRUE)
+##knitr::opts_chunk$set(dev = "ragg_png") # https://ragg.r-lib.org/index.html
+##knitr::opts_chunk$set(fig.width = 6) #https://r4ds.had.co.nz/graphics-for-communication.html#figure-sizing
+knitr::opts_chunk$set(fig.asp = 0.618)
+knitr::opts_chunk$set(fig.show = "hold")
+knitr::opts_chunk$set(fig.show = "70%")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r setup3}
+library(phyloseq)
+library(tidyverse)
+library(dplyr)
+library(ggnewscale)
+library(readr)
+library(speedyseq)
+library(microViz)
+library(GUniFrac)
+#library(ampvis2)
+library(ggpubr)
+library(gginnards)
+library(scales)
+library(reshape2)
+library(ape)
+library(GGally)
+library(rstatix)
+library(ggpubr)
+library(microbiomeMarker)
+library(DESeq2)
+library(ggrepel)
+library(magrittr)
+library(ANCOMBC)
+library(microeco)
+library(maaslin3)
+```
+
+```{r setup4}
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+source_dir = "https://raw.githubusercontent.com/fconstancias/DivComAnalyses/master/R/"
+
+source(paste0(source_dir,"phyloseq_taxa_tests.R"))
+source(paste0(source_dir,"phyloseq_normalisation.R"))
+source(paste0(source_dir,"phyloseq_heatmap.R"))
+source(paste0(source_dir,"phyloseq_varia.R"))
+source(paste0(source_dir,"phyloseq_microeco.R"))
+```
+
+```{r setup5}
+# Differential abundance analysis parameters
+source("https://raw.githubusercontent.com/fconstancias/KU_Caroline/refs/heads/main/code/functions/phyloseq_functions.R")
+
+# Parameters for phyloseq_diff_abundance(): 
+
+#' @title Differiential feature analyses wrapper for Microbiome analyses
+#' @author Florentin Constancias
+#' @description 
+#' This script performs a comparative analysis of various approaches for microbiome studies, 
+#' including metagenomics, metabarcoding, metabolomics, and transcriptomics. The script 
+#' calculates the number of publications, environments analyzed, and the methods applied.
+#' 
+#' @param ps_tmp A phyloseq object. Defaults to saliva samples (`ps_up %>% subset_samples(Sample == "Saliva")`).
+#' @param approach Character vector specifying the analysis approach. Options include:
+#'   - "run_lefse": Linear discriminant analysis (LEfSe)
+#'   - "run_ancom": Analysis of composition of microbiomes (ANCOM)
+#'   - "ancombc2": ANCOMBC2 method for differential abundance
+#'   - "maaslin3": Multivariate analysis using Maaslin3
+#'   - "trans_diff_rf": Transformation-based Random Forest
+#'   - "classifier_rf": Random Forest classifier
+#' @param glom Taxonomic rank for agglomeration (e.g., "Species"). Set to `NULL` to skip agglomeration.
+#' @param unclassified_name Name for unclassified taxa (default: "UNCLASSIFIED").
+#' @param taxa_rank Taxonomic rank for differential abundance (default: "all").
+#' @param density Density metric to normalize counts. Default is "Quant".
+#' @param comp_group Grouping variable for comparison (e.g., "Time").
+#' @param palette Color palette for plots.
+#' @param pvalue_cutoff p-value cutoff for significance.
+#' @param p_adjust Method for p-value adjustment (e.g., "BH" for Benjamini-Hochberg).
+#' @param lefse_* Parameters specific to the LEfSe method.
+#' @param maaslin3_* Parameters specific to Maaslin3 analysis.
+#' @param ancombc2_* Parameters specific to ANCOMBC2 analysis.
+#' @param linda_* Parameters specific to LINDA (if used in the future).
+#' @param rf_* Parameters specific to Random Forest methods.
+#' @param trans_diff_rf_MeanDecreaseGini_cutoff Gini index cutoff for feature importance in Random Forest.
+```
+
+```{r MetaPhlAn}
+# Load phyloseq MetaPhlAn object
+# Not included in GitHub repo due to size
+# See README for data access information
+
+load(here::here("01_data.Rdata"))
+
+# Quick control that data is right
+ps_up %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN}
+# Load phyloseq HUMAnN object
+# Not included in GitHub repo due to size
+# See README for data access information
+
+load(here::here("01_humann_data.Rdata"))
+
+# Quick control that data is right
+pw_mia %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  DT::datatable()
+```
+
+```{r plot_positions}
+# Global ggplot position settings (used across figures)
+pd <- position_dodge(0.3)
+```
+
+```{r rename HUMAnN column names to taxonomical order termiology}
+pw_mia %>%
+  tax_mutate(Kingdom = "MetaCyc",
+             Phylum = Superclass1,
+             Class = Superclass1,
+             Order = Superclass1,
+             Family = Superclass2,
+             Genus = Superclass2,
+             Species = feature) %>%
+  physeq_sel_tax_table(c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")) -> pw_mia
+```
+
+```{r MetaPhlAn saliva baseline vs week 2}
+# MetaPhlAn (taxonomy)
+# Saliva
+# Initiation of gingivitis (baseline vs week 2)
+ps_up %>%
+  subset_samples(Sample_Type == "Saliva" &
+                 Time_new %in% c("Baseline", "Week 2")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_saliva_tp12
+```
+                                    
+```{r lefse}
+maaslin_tax_saliva_tp12$maaslin3$maaslin3_lefse_plot
+```
+
+```{r MetaPhlAn saliva week 2 vs week 4}
+# MetaPhlAn (taxonomy)
+# Saliva
+# Resolution of gingivitis (week 2 vs week 4)
+ps_up %>%
+  subset_samples(Sample_Type == "Saliva" &
+                 Time_new %in% c("Week 2", "Week 4")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time", 
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Week2_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_saliva_tp23
+```
+
+```{r lefse}
+maaslin_tax_saliva_tp23$maaslin3$maaslin3_lefse_plot
+```
+
+```{r MetaPhlAn saliva baseline vs week 4}
+# MetaPhlAn (taxonomy)
+# Saliva
+# Resilience towards gingivitis (baseline vs week 4)
+ps_up %>%
+  subset_samples(Sample_Type == "Saliva" &
+                 Time_new %in% c("Baseline", "Week 4")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_saliva_tp13
+```
+
+```{r lefse}
+maaslin_tax_saliva_tp13$maaslin3$maaslin3_lefse_plot
+```
+
+```{r MetaPhlAn supragingival plaque baseline vs week 2}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Initiation of gingivitis (baseline vs week 2)
+ps_up %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Baseline", "Week 2")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time", 
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_summary_plot_first_n = 15,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_plaque_tp12
+```
+
+```{r lefse}
+maaslin_tax_plaque_tp12$maaslin3$maaslin3_lefse_plot
+```
+
+```{r MetaPhlAn supragingival plaque week 2 vs week 4}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Resolution of gingivitis (week 2 vs week 4)
+ps_up %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Week 2", "Week 4")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Week2_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_summary_plot_first_n = 1,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_plaque_tp23
+```
+
+```{r lefse}
+maaslin_tax_plaque_tp23$maaslin3$maaslin3_lefse_plot
+```
+
+```{r MetaPhlAn supragingival plaque week 2 vs week 4 GENUS}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Resolution of gingivitis (week 2 vs week 4)
+# Genus-level
+ps_up %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Week 2", "Week 4")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Genus",
+                          taxa_rank = "Genus",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Week2_vs_week4_sre_genus", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_summary_plot_first_n = 7,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_plaque_tp23_GENUS
+```
+
+```{r lefse}
+maaslin_tax_plaque_tp23_GENUS$maaslin3$maaslin3_lefse_plot
+```
+
+```{r MetaPhlAn supragingival plaque baseline vs week 4}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Resilience towards gingivitis (baseline vs week 4)
+ps_up %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Baseline", "Week 4")) %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time", 
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_tax_plaque_tp13
+```
+
+```{r lefse}
+# No difference in species
+#maaslin_tax_plaque_tp13$maaslin3$maaslin3_lefse_plot
+```
+
+```{r HUMAnN saliva baseline vs week 2}
+# HUMAnN (functional)
+# Saliva
+# Initiation of gingivitis (baseline vs week 2)
+pw_mia %>%
+  subset_samples(Sample_Type == "Saliva" &
+                 Time_new %in% c("Baseline", "Week 2")) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time", 
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_pway_saliva_tp12
+```
+
+```{r lefse}
+maaslin_pway_saliva_tp12$maaslin3$maaslin3_lefse_plot
+```
+
+```{r HUMAnN saliva week 2 vs week 4}
+# HUMAnN (functional)
+# Saliva
+# Resolution of gingivitis (week 2 vs week 4)
+pw_mia %>%
+  subset_samples(Sample_Type == "Saliva" &
+                 Time_new %in% c("Week 2", "Week 4")) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Week2_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_pway_saliva_tp23
+```
+
+```{r lefse}
+maaslin_pway_saliva_tp23$maaslin3$maaslin3_lefse_plot
+```
+
+```{r HUMAnN saliva baseline vs week 4}
+# HUMAnN (functional)
+# Saliva
+# Resilience towards gingivitis (baseline vs week 4)
+pw_mia %>%
+  subset_samples(Sample_Type == "Saliva" &
+                 Time_new %in% c("Baseline", "Week 4")) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time", 
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_pway_saliva_tp13
+```
+
+```{r lefse}
+maaslin_pway_saliva_tp13$maaslin3$maaslin3_lefse_plot
+```
+
+```{r HUMAnN supragingival plaque baseline vs week 2}
+# HUMAnN (functional)
+# Supragingival plaque
+# Initiation of gingivitis (baseline vs week 2)
+pw_mia %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Baseline", "Week 2")) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_pway_plaque_tp12
+```
+
+```{r lefse}
+maaslin_pway_plaque_tp12$maaslin3$maaslin3_lefse_plot
+```
+
+```{r HUMAnN supragingival plaque week 2 vs week 4}
+# HUMAnN (functional)
+# Supragingival plaque
+# Resolution of gingivitis (week 2 vs week 4)
+pw_mia %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Week 2", "Week 4")) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Week2_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_pway_plaque_tp23
+```
+
+```{r lefse}
+maaslin_pway_plaque_tp23$maaslin3$maaslin3_lefse_plot
+```
+
+```{r HUMAnN supragingival plaque baseline vs week 4}
+# HUMAnN (functional)
+# Supragingival plaque
+# Resilience towards gingivitis (baseline vs week 4)
+pw_mia %>%
+  subset_samples(Sample_Type == "Plaque" &
+                 Time_new %in% c("Baseline", "Week 4")) %>%
+  phyloseq_diff_abundance(ps_tmp = .,
+                          approach = "maaslin3",
+                          glom = "Species",
+                          taxa_rank = "Species",
+                          comp_group = "Time",  
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          maaslin3_lefse_plot = TRUE,
+                          pvalue_cutoff = 0.05,
+                          maaslin3_small_random_effects = TRUE) -> maaslin_pway_plaque_tp13
+```
+
+```{r lefse}
+# No difference in species
+#maaslin_pway_plaque_tp13$maaslin3$maaslin3_lefse_plot
+```
+
+```{r session info}
+sessionInfo()
+```
