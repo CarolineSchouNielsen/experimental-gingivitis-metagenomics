@@ -1,0 +1,700 @@
+---
+title: "Beta diversity analyses for published article"
+subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
+author: "Caroline Schou Nielsen"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document: 
+    toc: yes
+    keep_md: no
+---
+
+```{r setup}
+rm(list = ls())
+gc()
+# invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
+# options(java.parameters = "-Xmx80000m")
+```
+
+```{r setup2}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+##knitr::opts_chunk$set(cache=TRUE)
+##knitr::opts_chunk$set(echo = TRUE)
+##knitr::opts_chunk$set(dev = "ragg_png") # https://ragg.r-lib.org/index.html
+##knitr::opts_chunk$set(fig.width = 6) #https://r4ds.had.co.nz/graphics-for-communication.html#figure-sizing
+knitr::opts_chunk$set(fig.asp = 0.618)
+knitr::opts_chunk$set(fig.show = "hold")
+knitr::opts_chunk$set(fig.show = "70%")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r setup3}
+library(tidyverse)
+library(readxl)
+library(readr)
+library(speedyseq)
+library(microViz)
+library(vegan)
+library(mia)
+library(ape)
+library(GUniFrac)
+library(here)
+```
+
+```{r setup4}
+# Import functions
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+source_dir = "https://raw.githubusercontent.com/fconstancias/DivComAnalyses/master/R/"
+
+source(paste0(source_dir,"phyloseq_varia.R"))
+source(paste0(source_dir,"phyloseq_beta.R"))
+source(paste0(source_dir,"phyloseq_normalisation.R"))
+```
+
+```{r setup5}
+# Beta diversity parameters
+source("https://raw.githubusercontent.com/fconstancias/KU_Caroline/refs/heads/main/code/functions/phyloseq_functions.R")
+
+# compute_plot_beta() 
+# details:
+
+#' @title This function calculates beta diversity, generates ordination plots (e.g., PCoA),  performs PERMANOVA, and optionally creates boxplots of distances between metadata groups.
+#' @author Florentin Constancias
+#' @param ps_up A phyloseq object containing microbiome data.
+#' @param beta A list of distance matrices for beta diversity (e.g., Bray-Curtis, Aitchison).
+#' @param m Character string specifying the ordination method (default: "PCoA").
+#' @param color_group Character string for the variable used to color points in ordination plots (default: "Time").
+#' @param shape_group Character string for the variable used to shape points in ordination plots (default: "Sample").
+#' @param alpha Optional variable for transparency adjustment in ordination plots (default: NULL).
+#' @param col_pal Color palette for point colors (default: `time_pal`).
+#' @param fill_pal Fill color palette for point fills (default: `time_pal`).
+#' @param path_group Character string for the variable grouping paths in ordination plots (default: "interaction(Sample,Subject)").
+#' @param facet_formula Formula for faceting ordination plots (default: "Sample ~ .").
+#' @param axis1 Integer specifying the ordination axis to plot on the x-axis (default: 1).
+#' @param axis2 Integer specifying the ordination axis to plot on the y-axis (default: 2).
+#' @param seed Integer for random seed, ensuring reproducible results in ordination (default: 123).
+#' @param permanova_terms Character vector of variables for PERMANOVA tests (default: c("Time", "cluster_Dtp2")).
+#' @param metadata_dist_boxplot Optional variable for generating distance boxplots (default: NULL).
+#' @param strata Variable for stratified PERMANOVA testing (default: "none").
+#' @param perm Number of permutations for PERMANOVA (default: 999).
+#' 
+#' @return A list of results, including:
+#'   - `pcoas`: Ordination plots with faceting and custom color/shape groups.
+#'   - `expl_var`: Explained variance for each axis in ordination plots.
+#'   - `PCOA`: Detailed ordination plot for the rAitchison distance with paths.
+#'   - `PCOA_leg`: Legend for the ordination plot.
+#'   - `perm`: PERMANOVA results.
+#'   - `pw_perm`: Pairwise PERMANOVA results for each variable in `permanova_terms`.
+#'   - `tw_perm`: Two-way PERMANOVA results for each variable in `permanova_terms`.
+#'   - Optional: `dist_boxplot` if `metadata_dist_boxplot` is provided, showing boxplots of distances.
+```
+
+```{r MetaPhlAn}
+# Load phyloseq MetaPhlAn object
+# Not included in GitHub repo due to size
+# See README for data access information
+
+load(here::here("01_data.Rdata"))
+
+# Quick control that data is right
+ps_up %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN}
+# Load phyloseq HUMAnN object
+# Not included in GitHub repo due to size
+# See README for data access information
+
+load(here::here("01_humann_data.Rdata"))
+
+# Quick control that data is right
+pw_mia %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  DT::datatable()
+```
+
+```{r plot_positions}
+# Global ggplot position settings (used across figures)
+pd <- position_dodge(0.3)
+```
+
+```{r standard theme}
+# Set standard theme
+theme(legend.position = "bottom", 
+      plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"),
+      legend.box.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"),
+      legend.spacing = unit(0.3, "cm")) -> standard_theme
+```
+
+```{r MetaPhlAn data transformation}
+# MetaPhlAn data transformation for beta diversity analysis
+# Calculates bjaccard, wjaccard and rAitchison beta diversity measures
+beta <- ps_up %>%
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  phyloseq_compute_bdiv()
+```
+
+```{r calculate MetaPlhAn beta diversity measures, warning=FALSE}
+# Subset phyloseq object
+ps_tmp <- ps_up %>%
+        subset_taxa(Class != "UNCLASSIFIED") %>% 
+        transform_sample_counts(function(x) x/sum(x) * 1)
+
+# Extract OTU table
+otu_mat <- as(otu_table(ps_tmp), "matrix") %>% t()
+# Assign sample names explicitly
+rownames(otu_mat) <- sample_names(ps_tmp)
+
+# Robust CLR transformation
+clr_mat <- vegan::decostand(otu_mat, "rclr") 
+# Assign sample names explicitly
+rownames(clr_mat) <- sample_names(ps_tmp)
+
+# Assign Robust Aitchison distance to beta variable
+beta$rAitchison <- vegan::vegdist(clr_mat, method = "euclidean") %>% 
+  magrittr::divide_by(100)
+
+# Remove Bray-Curtis and Sørensen beta
+beta$bray <- NULL 
+beta$sorensen <- NULL 
+```
+
+```{r MetaPhlAn saliva baseline vs week 2, warning=FALSE}
+# MetaPhlAn (taxonomy)
+# Saliva
+# Initiation of gingivitis (baseline vs week 2)
+ps_up %>%
+  subset_samples(Sample == "Saliva" & 
+                 Time_new %in% c("Baseline", "Week 2")) %>% 
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                    beta = beta,
+                    color_group = "Time_new",
+                    shape_group = "Sample",
+                    distance_for_more = "rAitchison",
+                    tax_rank_fit  = "Species", 
+                    metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                    pval_cutoff = 1, # Can be adjusted to preferences. We are not interest in vectors, and so, the value is non-significant. 
+                    top_r = 10, # Can be adjusted to preferences. 
+                    alpha = NULL,
+                    col_pal = time_pal,
+                    fill_pal = time_pal,
+                    path_group = "interaction(Subject)",
+                    facet_formula = ". ~ .", 
+                    axis1 = 1,
+                    axis2 = 2,
+                    seed = 123,
+                    perm = 999, 
+                    permanova_terms = c("Time"), 
+                    strata = "none") -> tax_saliva_tp12
+
+tax_saliva_tp12$PCOA$p
+```
+
+```{r statistics}
+tax_saliva_tp12$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r MetaPhlAn saliva week 2 vs week 4,return = FALSE}
+# MetaPhlAn (taxonomy)
+# Saliva
+# Resolution of gingivitis (week 2 vs week 4)
+ps_up %>%
+  subset_samples(Sample == "Saliva" & 
+                 Time_new %in% c("Week 2", "Week 4")) %>% 
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                    beta = beta,
+                    color_group = "Time_new",
+                    shape_group = "Sample",
+                    distance_for_more = "rAitchison", 
+                    tax_rank_fit  = "Species", 
+                    metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                    pval_cutoff = 1, 
+                    top_r = 10, 
+                    alpha = NULL,
+                    col_pal = time_pal,
+                    fill_pal = time_pal,
+                    path_group = "interaction(Subject)",
+                    facet_formula = ". ~ .", 
+                    axis1 = 1,
+                    axis2 = 2,
+                    seed = 123,
+                    perm = 999,
+                    permanova_terms = c("Time"), 
+                    strata = "none") -> tax_saliva_tp23
+
+tax_saliva_tp23$PCOA$p
+```
+
+```{r statistics}
+tax_saliva_tp23$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r MetaPhlAn saliva baseline vs week 4,return = FALSE}
+# MetaPhlAn (taxonomy)
+# Saliva
+# Resilience towards gingivitis (baseline vs week 4)
+ps_up %>%
+  subset_samples(Sample == "Saliva" & 
+                 Time_new %in% c("Baseline", "Week 4")) %>% 
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                    beta = beta,
+                    color_group = "Time_new",
+                    shape_group = "Sample",
+                    distance_for_more = "rAitchison", 
+                    tax_rank_fit  = "Species", 
+                    metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                    pval_cutoff = 1, 
+                    top_r = 10, 
+                    alpha = NULL,
+                    col_pal = time_pal,
+                    fill_pal = time_pal,
+                    path_group = "interaction(Subject)",
+                    facet_formula = ". ~ .",
+                    axis1 = 1,
+                    axis2 = 2,
+                    seed = 123,
+                    perm = 999,
+                    permanova_terms = c("Time"), 
+                    strata = "none") -> tax_saliva_tp13
+
+tax_saliva_tp13$PCOA$p
+```
+
+```{r statistics}
+tax_saliva_tp13$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r MetaPhlAn supragingival plaque baseline vs week 2,return = FALSE}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Initiation of gingivitis (baseline vs week 2)
+ps_up %>%
+  subset_samples(Sample == "Plaque" & 
+                 Time_new %in% c("Baseline", "Week 2")) %>% 
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,  
+                    beta = beta,
+                    color_group = "Time_new",
+                    shape_group = "Sample",
+                    distance_for_more = "rAitchison", 
+                    tax_rank_fit  = "Species", 
+                    metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                    pval_cutoff = 1, 
+                    top_r = 10, 
+                    alpha = NULL,
+                    col_pal = time_pal,
+                    fill_pal = time_pal,
+                    path_group = "interaction(Subject)",
+                    facet_formula = ". ~ .", 
+                    axis1 = 1,
+                    axis2 = 2,
+                    seed = 123,
+                    perm = 999,
+                    permanova_terms = c("Time"), 
+                    strata = "none") -> tax_plaque_tp12
+
+tax_plaque_tp12$PCOA$p
+```
+
+```{r statistics}
+tax_plaque_tp12$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r MetaPhlAn supragingival plaque week 2 vs week 4,return = FALSE}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Resolution of gingivitis (week 2 vs week 4)
+ps_up %>%
+  subset_samples(Sample == "Plaque" & 
+                 Time_new %in% c("Week 2", "Week 4")) %>% 
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,  
+                    beta = beta,
+                    color_group = "Time_new",
+                    shape_group = "Sample",
+                    distance_for_more = "rAitchison", 
+                    tax_rank_fit  = "Species", 
+                    metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                    pval_cutoff = 1, 
+                    top_r = 10, 
+                    alpha = NULL,
+                    col_pal = time_pal,
+                    fill_pal = time_pal,
+                    path_group = "interaction(Subject)",
+                    facet_formula = ". ~ .", 
+                    axis1 = 1,
+                    axis2 = 2,
+                    seed = 123,
+                    perm = 999,
+                    permanova_terms = c("Time"), 
+                    strata = "none") -> tax_plaque_tp23
+
+tax_plaque_tp23$PCOA$p
+```
+
+```{r statistics}
+tax_plaque_tp23$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r MetaPhlAn supragingival plaque baseline vs week 4,return = FALSE}
+# MetaPhlAn (taxonomy)
+# Supragingival plaque
+# Resilience towards gingivitis (baseline vs week 4)
+ps_up %>%
+  subset_samples(Sample == "Plaque" & 
+                 Time_new %in% c("Baseline", "Week 4")) %>% 
+  subset_taxa(Class != "UNCLASSIFIED") %>% 
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,  
+                    beta = beta,
+                    color_group = "Time_new",
+                    shape_group = "Sample",
+                    distance_for_more = "rAitchison", 
+                    tax_rank_fit  = "Species", 
+                    metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                    pval_cutoff = 1, 
+                    top_r = 10, 
+                    alpha = NULL,
+                    col_pal = time_pal,
+                    fill_pal = time_pal,
+                    path_group = "interaction(Subject)",
+                    facet_formula = ". ~ .", 
+                    axis1 = 1,
+                    axis2 = 2,
+                    seed = 123,
+                    perm = 999,
+                    permanova_terms = c("Time"),
+                    strata = "none") -> tax_plaque_tp13
+
+tax_plaque_tp13$PCOA$p
+```
+
+```{r statistics}
+tax_plaque_tp13$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN data transformation}
+# HUMAnN data transformation for beta diversity analysis
+# Calculates bjaccard, wjaccard and rAitchison beta diversity measures
+beta_pway <- pw_mia %>%
+  transform_sample_counts(function(x) x/sum(x) * 100) %>%
+  phyloseq_compute_bdiv()
+```
+
+```{r calculate HUMAnN beta diversity measures, warning=FALSE}
+# Subset phyloseq object
+ps_tmp <- pw_mia %>%
+        transform_sample_counts(function(x) x/sum(x) * 1) 
+
+# Extract OTU table
+otu_mat <- as(otu_table(ps_tmp), "matrix") %>% t()
+# Assign sample names explicitly
+rownames(otu_mat) <- sample_names(ps_tmp) 
+
+# Robust CLR transformation
+clr_mat <- vegan::decostand(otu_mat, "rclr") 
+# Assign sample names explicitly
+rownames(clr_mat) <- sample_names(ps_tmp)
+
+# Assign Robust Aitchison distance to beta variable
+beta_pway$rAitchison <- vegan::vegdist(clr_mat, method = "euclidean") %>% 
+  magrittr::divide_by(100)
+
+# Remove Bray-Curtis and Sørensen
+beta_pway$bray <- NULL
+beta_pway$sorensen <- NULL
+```
+
+```{r rename HUMAnN column names to taxonomical order termiology}
+pw_mia %>%
+  tax_mutate(Kingdom = "MetaCyc",
+             Phylum = Superclass1,
+             Class = Superclass1,
+             Order = Superclass1,
+             Family = Superclass2,
+             Genus = Superclass2,
+             Species = feature) %>%
+  physeq_sel_tax_table(c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")) -> pw_mia
+```
+
+```{r HUMAnN saliva baseline vs week 2, warning=FALSE}
+# HUMAnN (functional)
+# Saliva
+# Initiation of gingivitis (baseline vs week 2)
+pw_mia %>% 
+  subset_samples(Sample == "Saliva" & 
+                  Time_new %in% c("Baseline", "Week 2")) %>%
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                        beta = beta_pway,
+                        color_group = "Time_new",
+                        shape_group = "Sample",
+                        distance_for_more = "rAitchison", 
+                        tax_rank_fit  = "Species", 
+                        metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                        pval_cutoff = 1, 
+                        top_r = 10, 
+                        alpha = NULL,
+                        col_pal = time_pal,
+                        fill_pal = time_pal,
+                        path_group = "interaction(Subject)",
+                        facet_formula = ". ~ .", 
+                        axis1 = 1,
+                        axis2 = 2,
+                        seed = 123,
+                        perm = 999,
+                        permanova_terms = c("Time"),
+                        strata = "none") -> pway_saliva_tp12
+
+pway_saliva_tp12$PCOA$p
+```
+
+```{r statistics}
+pway_saliva_tp12$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN saliva week 2 vs week 4, warning=FALSE}
+# HUMAnN (functional)
+# Saliva
+# Resolution of gingivitis (week 2 vs week 4)
+pw_mia %>%
+  subset_samples(Sample == "Saliva" & 
+                  Time_new %in% c("Week 2", "Week 4")) %>%
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                        beta = beta_pway,
+                        color_group = "Time_new",
+                        shape_group = "Sample",
+                        distance_for_more = "rAitchison", 
+                        tax_rank_fit  = "Species", 
+                        metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                        pval_cutoff = 1, 
+                        top_r = 10, 
+                        alpha = NULL,
+                        col_pal = time_pal,
+                        fill_pal = time_pal,
+                        path_group = "interaction(Subject)",
+                        facet_formula = ". ~ .", 
+                        axis1 = 1,
+                        axis2 = 2,
+                        seed = 123,
+                        perm = 999,
+                        permanova_terms = c("Time"),
+                        strata = "none") -> pway_saliva_tp23
+
+pway_saliva_tp23$PCOA$p
+```
+
+```{r statistics}
+pway_saliva_tp23$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN saliva baseline vs week 4, warning=FALSE}
+# HUMAnN (functional)
+# Saliva
+# Resilience towards gingivitis (baseline vs week 4)
+pw_mia %>%
+  subset_samples(Sample == "Saliva" & 
+                  Time_new %in% c("Baseline", "Week 4")) %>%
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                        beta = beta_pway,
+                        color_group = "Time_new",
+                        shape_group = "Sample",
+                        distance_for_more = "rAitchison", 
+                        tax_rank_fit  = "Species", 
+                        metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                        pval_cutoff = 1, 
+                        top_r = 10, 
+                        alpha = NULL,
+                        col_pal = time_pal,
+                        fill_pal = time_pal,
+                        path_group = "interaction(Subject)",
+                        facet_formula = " ~ .", 
+                        axis1 = 1,
+                        axis2 = 2,
+                        seed = 123,
+                        perm = 999,
+                        permanova_terms = c("Time"),
+                        strata = "none") -> pway_saliva_tp13
+
+pway_saliva_tp13$PCOA$p
+```
+
+```{r statistics}
+pway_saliva_tp13$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN supragingival plaque baseline vs week 2, warning=FALSE}
+# HUMAnN (functional)
+# Supragingival plaque
+# Initiation of gingivitis (baseline vs week 2)
+pw_mia %>%
+  subset_samples(Sample == "Plaque" & 
+                  Time_new %in% c("Baseline", "Week 2")) %>%
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                        beta = beta_pway,
+                        color_group = "Time_new",
+                        shape_group = "Sample",
+                        distance_for_more = "rAitchison", 
+                        tax_rank_fit  = "Species", 
+                        metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                        pval_cutoff = 1, 
+                        top_r = 10, 
+                        alpha = NULL,
+                        col_pal = time_pal,
+                        fill_pal = time_pal,
+                        path_group = "interaction(Subject)",
+                        facet_formula = " ~ .", 
+                        axis1 = 1,
+                        axis2 = 2,
+                        seed = 123,
+                        perm = 999,
+                        permanova_terms = c("Time"),
+                        strata = "none") -> pway_plaque_tp12
+
+pway_plaque_tp12$PCOA$p
+```
+
+```{r statistics}
+pway_plaque_tp12$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN supragingival plaque week 2 vs week 4, warning=FALSE}
+# HUMAnN (functional)
+# Supragingival plaque
+# Resolution of gingivitis (week 2 vs week 4)
+pw_mia %>%
+  subset_samples(Sample == "Plaque" & 
+                  Time_new %in% c("Week 2", "Week 4")) %>%
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                        beta = beta_pway,
+                        color_group = "Time_new",
+                        shape_group = "Sample",
+                        distance_for_more = "rAitchison", 
+                        tax_rank_fit  = "Species", 
+                        metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                        pval_cutoff = 1, 
+                        top_r = 10, 
+                        alpha = NULL,
+                        col_pal = time_pal,
+                        fill_pal = time_pal,
+                        path_group = "interaction(Subject)",
+                        facet_formula = ". ~ .", 
+                        axis1 = 1,
+                        axis2 = 2,
+                        seed = 123,
+                        perm = 999,
+                        permanova_terms = c("Time"),
+                        strata = "none") -> pway_plaque_tp23
+
+pway_plaque_tp23$PCOA$p
+```
+
+```{r statistics}
+pway_plaque_tp23$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN supragingival plaque baseline vs week 4, warning=FALSE}
+# HUMAnN (functional)
+# Supragingival plaque
+# Resilience towards gingivitis (baseline vs week 4)
+pw_mia %>%
+  subset_samples(Sample == "Plaque" & 
+                  Time_new %in% c("Baseline", "Week 4")) %>%
+  transform_sample_counts(function(x) x/sum(x) * 1) %>% 
+  microViz::ps_mutate(Inflamation_response = as.factor(Inflamation_response)) %>% 
+  phyloseq_explore_beta(ps_up = .,
+                        beta = beta_pway,
+                        color_group = "Time_new",
+                        shape_group = "Sample",
+                        distance_for_more = "rAitchison", 
+                        tax_rank_fit  = "Species", 
+                        metadata_sel = c("delta_mean_plaque", "delta_mean_bleeding"), 
+                        pval_cutoff = 1, 
+                        top_r = 10,
+                        alpha = NULL,
+                        col_pal = time_pal,
+                        fill_pal = time_pal,
+                        path_group = "interaction(Subject)",
+                        facet_formula = ". ~ .", 
+                        axis1 = 1,
+                        axis2 = 2,
+                        seed = 123,
+                        perm = 999,
+                        permanova_terms = c("Time"),
+                        strata = "none") -> pway_plaque_tp13
+
+pway_plaque_tp13$PCOA$p
+```
+ 
+```{r statistics}
+pway_plaque_tp13$pw_perm %>% 
+  dplyr::filter(Distance == "rAitchison") %>% 
+  mutate_if(is.numeric, ~round(., 4)) %>% 
+  DT::datatable()
+```
+
+```{r session info}
+sessionInfo()
+```
