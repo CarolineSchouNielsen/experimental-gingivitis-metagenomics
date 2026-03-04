@@ -14,7 +14,8 @@ This repository contains the workflow for taxonomic and functional profiling of 
 
 **1. Data import and data preprocessing**
 
-_File:_ `R/metaphlan_to_phyloseq.Rmd` 
+_File:_ `R/metaphlan_to_phyloseq.Rmd`
+
 _File:_ `R/humann_to_phyloseq.Rmd`
 * Load MetaPhlAn4 taxonomic profiles
 * Load HUMAnN functional profiles
