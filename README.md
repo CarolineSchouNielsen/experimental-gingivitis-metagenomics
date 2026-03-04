@@ -13,19 +13,22 @@ This repository contains the workflow for taxonomic and functional profiling of 
 ## Short description of R-code (in order of execution) 
 
 **1. Data import and data preprocessing**
+
 _File:_ `R/metaphlan_to_phyloseq.Rmd` 
 _File:_ `R/humann_to_phyloseq.Rmd`
 * Load MetaPhlAn4 taxonomic profiles
 * Load HUMAnN functional profiles
 * Import and merge metadata
 
-**2. Alpha-diversity analysis** 
+**2. Alpha-diversity analysis**
+
 _File:_ `R/alpha_v2.Rmd` 
 * Calculate diversity metrics (Shannon index)
 * Statistical comparison across sample type and timepoints 
 * Visualization
 
-**3. Beta-diversity analysis** 
+**3. Beta-diversity analysis**
+
 _File:_ `R/beta_v5.Rmd`
 * Compute distance matrices (robust Aitchison distance)
 * Ordination analysis and visualization (PCoA)
