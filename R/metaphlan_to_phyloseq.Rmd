@@ -1,0 +1,134 @@
+---
+title: "Import of MetaPhlAn4 data and transformation to phyloseq object for published article"
+subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
+author: "Caroline Schou Nielsen"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document: 
+    toc: yes
+    keep_md: no
+---
+
+```{r setup}
+rm(list = ls())
+gc()
+# invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
+# options(java.parameters = "-Xmx80000m")
+```
+
+```{r setup2}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+##knitr::opts_chunk$set(cache=TRUE)
+##knitr::opts_chunk$set(echo = TRUE)
+##knitr::opts_chunk$set(dev = "ragg_png") # https://ragg.r-lib.org/index.html
+##knitr::opts_chunk$set(fig.width = 6) #https://r4ds.had.co.nz/graphics-for-communication.html#figure-sizing
+knitr::opts_chunk$set(fig.asp = 0.618)
+knitr::opts_chunk$set(fig.show = "hold")
+knitr::opts_chunk$set(fig.show = "70%")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r setup3}
+library(tidyverse)
+library(readxl)
+library(readr)
+library(phyloseq)
+```
+
+```{r setup4}
+source("https://raw.githubusercontent.com/fconstancias/metabaRpipe-source/master/Rscripts/functions.R")
+source("https://raw.githubusercontent.com/fconstancias/DivComAnalyses/master/R/phyloseq_biobakery_functions.R")
+source("https://raw.githubusercontent.com/fconstancias/DivComAnalyses/master/R/phyloseq_varia.R") 
+
+source_dir = "https://raw.githubusercontent.com/fconstancias/DivComAnalyses/master/R/"
+
+source(paste0(source_dir,"phyloseq_biobakery_functions.R"))
+source(paste0(source_dir,"phyloseq_varia.R"))
+```
+
+```{r transform metaphlan merged abundance table into phyloseq object}
+ps <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/merged_abundance_table.txt" %>%
+metaphlan_2phyloseq(merged_metaphlan = .)
+
+# Calling the first few sample names
+ps %>% 
+  sample_names() %>% 
+  head()
+```
+
+```{r refine sample name}
+ps %>% 
+  sample_names() %>% 
+  str_extract(.,"[^_]+") %>% 
+  str_remove_all(., "[A-Z]")  -> sample_names(ps)
+
+ps %>% 
+  sample_names() %>% 
+  head()
+```
+
+```{r upload metadata table}
+meta <- '/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/Metadata/Metadata.xlsx'  %>%
+  read_excel
+
+meta %>% 
+  DT::datatable()
+```
+
+```{r merge phyloseq object with metadata}
+ps <- ps %>% 
+      physeq_add_metadata(metadata = meta,
+                      sample_column = "ID")
+```
+
+```{r add S_ to the beginning of ID names}
+# Phyloseq prefers samples names that does not start with a number
+ps %>% 
+  sample_names() %>% 
+  paste0("S_", .) -> sample_names(ps)
+```
+
+```{r Modify metadata within phyloseq object}
+ps_up <- ps %>% 
+  microViz::ps_mutate(Time = factor(Time, levels = c("TP1", "TP2", "TP3")),
+                      Period = Time,
+                      Time_new = Time,
+                      Time_new = recode(Time_new, TP1 = "Baseline", TP2 = "Week 2", TP3 = "Week 4"), 
+                      time = parse_number(as.character(Time)),
+                      Sample_Type =  Sample,
+                      Period = recode(Period, TP1  = "Baseline"),
+                      Sex = recode(sex, Male = 1, Female = 2),
+                      Sample = factor(Sample, levels = c("Saliva", "Plaque")),
+                      Subject = fct_relevel(Subject, "D01"))
+```
+
+```{r save phyloseq object to dataframe}
+dfdf <- ps_up %>% 
+  sample_data(.) %>% 
+  data.frame() 
+
+dfdf %>% 
+  DT::datatable()
+```
+
+```{r generate time color palette}
+# 3 colors = 3 time points
+ps_up %>% 
+  generate_color_palette(var = "Time_new",
+                         pal = "jama",
+                         print = TRUE) -> time_pal
+```
+
+```{r export to .Rdata file}
+save(time_pal,
+     ps_up, file = here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/R/07_metaphlan_to_phyloseq/01_data.Rdata"))
+```
+
+```{r export to phyloseq object}
+saveRDS(object = ps_up, file = here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/R/07_metaphlan_to_phyloseq/metaphlan4.1.1_phyloseq.RDS"))
+```
+
+```{r session info}
+sessionInfo()
+```

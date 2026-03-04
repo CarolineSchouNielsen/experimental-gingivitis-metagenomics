@@ -1,0 +1,162 @@
+---
+title: "Import of HUMAnN data and transformation to phyloseq object for published article"
+subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
+author: "Caroline Schou Nielsen"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document: 
+    toc: yes
+    keep_md: no
+---
+
+```{r setup}
+rm(list = ls())
+gc()
+# invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
+# options(java.parameters = "-Xmx80000m")
+```
+
+```{r setup2}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+##knitr::opts_chunk$set(cache=TRUE)
+##knitr::opts_chunk$set(echo = TRUE)
+##knitr::opts_chunk$set(dev = "ragg_png") # https://ragg.r-lib.org/index.html
+##knitr::opts_chunk$set(fig.width = 6) #https://r4ds.had.co.nz/graphics-for-communication.html#figure-sizing
+knitr::opts_chunk$set(fig.asp = 0.618)
+knitr::opts_chunk$set(fig.show = "hold")
+knitr::opts_chunk$set(fig.show = "70%")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r setup3}
+library(tidyverse)
+library(readxl)
+library(readr)
+library(speedyseq)
+```
+
+```{r setup 4}
+source_dir = "https://raw.githubusercontent.com/fconstancias/DivComAnalyses/master/R/"
+
+source(paste0(source_dir,"phyloseq_biobakery_functions.R"))
+source(paste0(source_dir,"phyloseq_varia.R"))
+source(paste0(source_dir,"phyloseq_alpha.R"))
+source(paste0(source_dir,"phyloseq_beta.R"))
+source(paste0(source_dir,"phyloseq_normalisation.R"))
+
+source("https://raw.githubusercontent.com/fconstancias/metabaRpipe-source/master/Rscripts/functions.R")
+source("https://raw.githubusercontent.com/fconstancias/KU_Caroline/refs/heads/main/code/functions/phyloseq_functions.R")
+```
+
+# 1 Arguments of the `import_humann_pathway_mia` function
+
+```{r setup5}
+#' Import and Process HUMAnN Pathway Data for Microbial Ecology Analysis
+#'
+#' This function imports HUMAnN pathway data, processes it into a `phyloseq` object, 
+#' and cleans and annotates the data to facilitate downstream analysis in microbial ecology studies.
+#' 
+#' import_humann_pathway_mia
+#' details: 
+#' 
+#' @param pathway A file path or object containing HUMAnN pathway or gene family level data.
+#' @param rank The taxonomic rank used for filtering or organizing the taxonomy table. Default is `"pathway"`.
+#' @param tax_clean_gsub A regular expression pattern to clean unwanted characters or prefixes in taxonomy labels. Default is `"[a-t]__"`.
+#' @param no_sel A vector of values to exclude during filtering, such as `NA` or `"unclassified"`. Default is `c(NA, "<NA>", "NA", "unclassified")`.
+#' @param sub_pat_a A string pattern for initial cleaning of sample names. Default is `"_trimmed_HF_merged_Abundance-RELAB"`.
+#' @param sub_pat_b A string pattern for additional cleaning of sample names. Default is `"_subset50"`.
+#' @param tax_na_if A string indicating taxonomy entries to replace with `NA`. Default is `"unclassified"`.
+#' @param sample_name_clean_a A regular expression pattern for extracting meaningful parts of sample names. Default is `"[^_]+"`.
+#' @param sample_name_clean_b A regular expression for removing specific patterns in sample names. Default is `"[A-Z]"`.
+#' @param meta File path to metadata (in Excel format). Default points to a metadata file for the Deerland Study.
+#' @param sample_column The column name in the metadata file corresponding to sample IDs. Default is `"ID"`.
+#' @param sample_nam_prefix A prefix to add to sample names. Default is `"S_"`.
+#' @param rm_un Logical; whether to remove taxonomy entries starting with `"UN"`. Default is `TRUE`.
+#' @param return_unstrat Logical; whether to return only unstratified pathways. Default is `TRUE`.
+#' @param str_trun An integer specifying the maximum length of pathway names for truncation. Default is `40`.
+#' @param add_MetaCyc_pathway_map Logical; whether to include MetaCyc pathway mapping. Default is `TRUE`.
+#' @param add_CHOCOPhlAn_taxonomy Logical; whether to annotate with CHOCOPhlAn taxonomy. Default is `TRUE`.
+#' @param final_tax_table_ranks A vector of column names defining the final structure of the taxonomy table. Default includes taxonomic and pathway features.
+#' 
+#' @return A `phyloseq` object with processed HUMAnN pathway data, cleaned sample names, taxonomy table, and metadata.
+#' 
+#' @details 
+#' This function performs the following operations:
+#' - Imports HUMAnN pathway data using `mia::importHUMAnN`.
+#' - Converts the data into a `phyloseq` object for downstream microbial ecology analysis.
+#' - Cleans sample names based on specified substitution patterns and regular expressions.
+#' - Adds metadata to the `phyloseq` object for sample-level annotations.
+#' - Processes and cleans the taxonomy table, replacing "unclassified" entries with `NA`, and optionally removing entries starting with "UN".
+#' - Annotates pathways using MetaCyc and/or CHOCOPhlAn taxonomy data, with abbreviations for long pathway names and features.
+#' 
+#' @examples
+#' \dontrun{
+#' pathway_data <- "path/to/humann_pathway_data.tsv"
+#' processed_data <- import_humann_pathway_mia(
+#'   pathway = pathway_data,
+#'   meta = "path/to/metadata.xlsx",
+#'   sample_column = "SampleID"
+#' )
+#' }
+#' 
+
+```
+
+```{r import metaphlan and metadata data}
+load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/R/07_metaphlan_to_phyloseq/01_data.Rdata"))
+```
+
+```{r extract metadata from phyloseq object}
+metaph_metadata <- ps_up %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  rownames_to_column('tmp')
+```
+
+```{r import HUMAnN data}
+pathway <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_pathabundance_cpm.tsv"
+kegg <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_genefamilies_uniref90_ko_renamed_relab.tsv"
+l4c <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_genefamilies_uniref90_level4ec_renamed_relab.tsv"
+go <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_genefamilies_uniref90_go_renamed_relab.tsv"
+eggnog <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_genefamilies_uniref90_eggnog_relab.tsv"
+rxn <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_genefamilies_uniref90_rxn_renamed_relab.tsv"
+pfam <- "/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/humann/Merged_genefamilies_uniref90_pfam_renamed_relab.tsv"
+```
+
+```{r import HUMAnN pathway data and combine with metadata}
+pw_mia_strat <- pathway %>% 
+  import_humann_pathway_mia(meta = metaph_metadata, 
+                            sample_column = 'tmp',
+                            rm_un = FALSE, # Remove UNMAPPED and UNINTEGRATED Pathways
+                            return_unstrat = FALSE, # 
+                            add_CHOCOPhlAn_taxonomy = TRUE, # add Metaphlan/humann taxonomic path 
+                            add_MetaCyc_pathway_map = FALSE) # add MetaCyc pathway hierarchy
+
+pw_mia_strat %>% 
+  tax_table() %>% 
+  head()
+
+pw_mia_strat %>% 
+  tax_table() %>% 
+  tail()
+```
+
+```{r by default return Unstratified data}
+pw_mia <- pathway %>% 
+  import_humann_pathway_mia(meta = metaph_metadata, 
+                            sample_column = 'tmp')
+
+pw_mia %>% 
+  tax_table() %>% 
+  head()
+```
+
+```{r export to .Rdata file}
+save(pw_mia, 
+     pw_mia_strat, file = here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/R/01_humann_data.Rdata"))
+```
+
+```{r session info}
+sessionInfo()
+```
