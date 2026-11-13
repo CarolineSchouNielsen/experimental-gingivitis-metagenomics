@@ -1,0 +1,778 @@
+---
+title: "Taxonomic contribution analysis for representative pathways"
+subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
+author: "Caroline Schou Nielsen"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document: 
+    toc: yes
+    keep_md: no
+---
+
+```{r setup}
+rm(list = ls())
+gc()
+# invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
+# options(java.parameters = "-Xmx80000m")
+```
+
+```{r setup2}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+##knitr::opts_chunk$set(cache=TRUE)
+##knitr::opts_chunk$set(echo = TRUE)
+##knitr::opts_chunk$set(dev = "ragg_png") # https://ragg.r-lib.org/index.html
+##knitr::opts_chunk$set(fig.width = 6) #https://r4ds.had.co.nz/graphics-for-communication.html#figure-sizing
+knitr::opts_chunk$set(fig.asp = 0.618)
+knitr::opts_chunk$set(fig.show = "hold")
+knitr::opts_chunk$set(fig.show = "70%")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+```{r setup3}
+library(phyloseq)
+library(tidyverse)
+library(ggnewscale)
+library(readr)
+library(speedyseq)
+library(microViz)
+library(GUniFrac)
+#library(ampvis2)
+library(ggpubr)
+library(gginnards)
+library(scales)
+library(reshape2)
+library(ape)
+library(GGally)
+library(rstatix)
+library(ggpubr)
+library(ggplot2)
+library(dplyr)
+library(tibble)
+library(tidyr)
+library(viridis)
+library(patchwork)
+library(ggh4x)
+library(stringr)
+library(forcats)
+library(patchwork)
+```
+
+```{r MetaPhlAn}
+# Load phyloseq MetaPhlAn object
+# Not included in GitHub repo due to size
+# See README for data access information
+
+load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/R/07_metaphlan_to_phyloseq/01_data.Rdata"))
+
+# Quick control that data is right
+ps_up %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  DT::datatable()
+```
+
+```{r HUMAnN}
+# Load phyloseq HUMAnN object
+# Not included in GitHub repo due to size
+# See README for data access information
+
+load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/R/01_humann_data.Rdata"))
+
+# Quick control that data is right
+pw_mia_strat %>% 
+  sample_data() %>% 
+  data.frame() %>% 
+  DT::datatable()
+```
+
+# Example of identifying pathway name
+```{r find the exact pathway names}
+tax_df <- as.data.frame(tax_table(pw_mia_strat))
+unique(tax_df$pathway_name) %>%
+    grep("heme", ., value = TRUE)
+```
+
+## Baseline vs week 2 in supragingival plaque
+```{r extract rows beloning to pathway}
+tax_phylo <- pw_mia_strat %>% 
+  subset_samples(Sample == "Plaque" & 
+                 Time_new %in% c("Baseline", "Week 2")) %>% 
+  subset_taxa(pathway_name %in% c("L-N-delta--acetylornithine Bios.", "L-ornithine Bios. II", "SPWY. of putrescine Bios.", 
+                                  "SPWY. of polyamine Bios. I", "heme b Bios. V (aerobic)", "heme b Bios. II (oxygen-independent)", 
+                                  "CMP-3-deoxy-D-manno-octulosonate Bios.")) 
+
+# Extract taxonomy
+tax <- as.data.frame(tax_table(tax_phylo))
+tax$Genus[is.na(tax$Genus) | tax$Genus %in% c("", "NA", "unclassified", "Unclassified", "g__")] <- "Unclassified"
+tax$feature <- rownames(tax)
+
+# Extract OTU
+otu <- as.data.frame(otu_table(tax_phylo)) 
+otu$feature <- rownames(otu)
+
+df <- left_join(otu, tax, by = "feature")
+
+otu_genus <- df %>%
+  mutate(Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus)) %>%
+  group_by(pathway_id, pathway_name, Genus, Superclass2) %>%
+  summarise(across(where(is.numeric), sum), .groups = "drop")
+
+# Extract metadata
+meta <- as.data.frame(sample_data(tax_phylo))
+
+meta <- structure(meta, class = "data.frame", row.names = rownames(meta))
+
+meta$SampleID <- rownames(meta)
+```
+
+```{r calculate species richness per sample}
+richness_long <- df %>%
+  pivot_longer(cols = starts_with("S_"), names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(meta, by = "SampleID") %>%
+  filter(Abundance > 0) %>%   # only species that are present
+  group_by(pathway_name, Superclass2, Time_new, Genus, Sample) %>%
+  summarise(n_species = n_distinct(Species),.groups = "drop")
+
+richness_long <- richness_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+richness_legend_levels <- c(setdiff(levels(richness_long$Genus), "Unclassified"), "Unclassified")
+
+richness_long <- richness_long %>%
+  mutate(Genera = factor(Genus, levels = richness_legend_levels))
+```
+
+```{r}
+richness_df <- richness_long %>%
+  filter(Group == "Classified") %>%
+  distinct(pathway_name, Superclass2, Sample, Time_new, Genus, n_species)
+
+richness_p <- ggplot(richness_df, aes(x = Time_new, y = n_species)) +
+  geom_boxplot(width = 0.6) + facet_nested(~ Sample + Superclass2 + pathway_name, scales = "free_x", space = "free_x") +
+  labs(y = "Species richness", x = NULL) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"))
+
+richness_p
+```
+
+```{r}
+otu_long <- otu_genus %>%
+  pivot_longer(cols = starts_with("S_"), names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(meta, by = "SampleID") %>%
+  mutate(Genus = trimws(Genus), Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus), Genus = factor(Genus)) %>%
+  group_by(pathway_name, Sample, Time_new, Genus, Superclass2) %>%
+  summarise(Abundance = mean(Abundance, na.rm = TRUE), .groups = "drop")
+
+otu_long <- otu_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+legend_levels <- c(setdiff(levels(otu_long$Genus), "Unclassified"), "Unclassified")
+
+otu_long <- otu_long %>%
+  mutate(Genera = factor(Genus, levels = legend_levels))
+```
+
+```{r create color palette}
+all_genus <- unique(as.character(otu_long$Genus))
+
+other <- setdiff(all_genus, "Unclassified")
+
+fill_colors <- c("Unclassified" = "#DF8F4499", setNames(viridis::viridis(length(setdiff(unique(otu_long$Genus), "Unclassified")), option = "turbo"), setdiff(unique(otu_long$Genus), "Unclassified")))
+```
+
+```{r}
+baseline_week2_plaque_p <- ggplot(
+  otu_long,
+  aes(x = Time_new, y = Abundance, fill = Genera)) +
+  geom_col(colour = "white", linewidth = 0.1) +
+  facet_nested(Group ~ Sample + Superclass2 + pathway_name, scales = "free_x", space = "free_x") + 
+  scale_fill_manual(values = fill_colors, drop = FALSE) + 
+  labs(x = "Time point", y = "Average genus contribution to pathway") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"), 
+        legend.position = "bottom") + guides(fill = guide_legend(reverse = FALSE, nrow = 5))
+
+baseline_week2_plaque_p
+```
+
+```{r}
+baseline_week2_plaque_p <- richness_p/baseline_week2_plaque_p +
+  plot_layout(heights = c(1, 4))
+
+baseline_week2_plaque_p
+
+
+ggsave("/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/08_tax_contribution/08_plots/baseline_week2_plaque.png", plot = baseline_week2_plaque_p, dpi = 300, 
+       units = "cm", width = 50, height = 30)
+```
+
+## Baseline vs week 2 in saliva
+```{r extract rows beloning to pathway}
+tax_phylo <- pw_mia_strat %>% 
+  subset_samples(Sample == "Saliva" & 
+                 Time_new %in% c("Baseline", "Week 2")) %>% 
+  subset_taxa(pathway_name %in% c("L-N-delta--acetylornithine Bios.", "L-ornithine Bios. II", "SPWY. of putrescine Bios.", 
+                                  "SPWY. of polyamine Bios. I", "SPWY. of arginine and polyamine Bios.", 
+                                  "SPWY. of GDP-mannose-derived O-antigen building blocks Bios."))
+
+# Extract taxonomy
+tax <- as.data.frame(tax_table(tax_phylo))
+tax$Genus[is.na(tax$Genus) | tax$Genus %in% c("", "NA", "unclassified", "Unclassified", "g__")] <- "Unclassified"
+tax$feature <- rownames(tax)
+
+# Extract OTU
+otu <- as.data.frame(otu_table(tax_phylo)) 
+otu$feature <- rownames(otu)
+
+df <- left_join(otu, tax, by = "feature")
+
+otu_genus <- df %>%
+  mutate(Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus)) %>%
+  group_by(pathway_id, pathway_name, Genus, Superclass2) %>%
+  summarise(across(where(is.numeric), sum), .groups = "drop")
+
+# Extract metadata
+meta <- as.data.frame(sample_data(tax_phylo))
+
+meta <- structure(
+  meta,
+  class = "data.frame",
+  row.names = rownames(meta)
+)
+
+meta$SampleID <- rownames(meta)
+```
+
+```{r}
+pathway_labeller <- labeller(pathway_name = c(
+                                  "L-N-delta--acetylornithine Bios." = "L-N-delta--acetylornithine Bios.", 
+                                  "L-ornithine Bios. II" = "L-ornithine Bios. II", 
+                                  "SPWY. of putrescine Bios." = "SPWY. of putrescine Bios.", 
+                                  "SPWY. of polyamine Bios. I" = "SPWY. of polyamine Bios. I", 
+                                  "SPWY. of arginine and polyamine Bios." = "SPWY. of arginine and polyamine Bios.", 
+                                  "SPWY. of GDP-mannose-derived O-antigen building blocks Bios." = "SPWY. of GDP-mannose-derived\nO-antigen building blocks Bios."))
+```
+
+```{r calculate species richness per sample}
+richness_long <- df %>%
+  pivot_longer(cols = starts_with("S_"), names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(meta, by = "SampleID") %>%
+  filter(Abundance > 0) %>%   # only species that are present
+  group_by(pathway_name, Superclass2, Time_new, Genus, Sample) %>%
+  summarise(n_species = n_distinct(Species),.groups = "drop")
+
+richness_long <- richness_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+richness_legend_levels <- c(setdiff(levels(richness_long$Genus), "Unclassified"), "Unclassified")
+
+richness_long <- richness_long %>%
+  mutate(Genera = factor(Genus, levels = richness_legend_levels))
+```
+
+```{r}
+richness_df <- richness_long %>%
+  filter(Group == "Classified") %>%
+  distinct(pathway_name, Superclass2, Sample, Time_new, Genus, n_species)
+
+richness_p <- ggplot(richness_df, aes(x = Time_new, y = n_species)) +
+  geom_boxplot(width = 0.6) + facet_nested(~ Sample + Superclass2 + pathway_name, labeller = pathway_labeller, scales = "free_x", space = "free_x") +
+  labs(y = "Species richness", x = NULL) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"))
+
+richness_p
+```
+
+```{r OTU}
+otu_long <- otu_genus %>%
+  pivot_longer(
+    cols = starts_with("S_"),
+    names_to = "SampleID",
+    values_to = "Abundance"
+  ) %>%
+  left_join(meta, by = "SampleID") %>%
+  mutate(
+    Genus = trimws(Genus),
+    Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus),
+    Genus = factor(Genus)
+  ) %>%
+  group_by(pathway_name, Sample, Time_new, Genus, Superclass2) %>%
+  summarise(
+    Abundance = mean(Abundance, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+otu_long <- otu_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+legend_levels <- c(setdiff(levels(otu_long$Genus), "Unclassified"),
+                   "Unclassified")
+
+otu_long <- otu_long %>%
+  mutate(Genera = factor(Genus, levels = legend_levels))
+```
+
+```{r create color palette}
+all_genus <- unique(as.character(otu_long$Genus))
+
+other <- setdiff(all_genus, "Unclassified")
+
+fill_colors <- c("Unclassified" = "#DF8F4499", setNames(viridis::viridis(length(setdiff(unique(otu_long$Genus), "Unclassified")), option = "turbo"), setdiff(unique(otu_long$Genus), "Unclassified")))
+```
+
+```{r}
+baseline_week2_saliva_p <- ggplot(
+  otu_long,
+  aes(x = Time_new, y = Abundance, fill = Genera)) +
+  geom_col(colour = "white", linewidth = 0.1) +
+  facet_nested(Group ~ Sample + Superclass2 + pathway_name, labeller = pathway_labeller, scales = "free_x", space = "free_x") + 
+  scale_fill_manual(values = fill_colors, drop = FALSE) + 
+  labs(x = "Time point", y = "Average genus contribution to pathway") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"), 
+        legend.position = "bottom") + guides(fill = guide_legend(reverse = FALSE, nrow = 5))
+
+baseline_week2_saliva_p
+```
+
+```{r}
+baseline_week2_saliva_p <- richness_p/baseline_week2_saliva_p +
+  plot_layout(heights = c(1, 4))
+
+baseline_week2_saliva_p
+
+ggsave("/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/08_tax_contribution/08_plots/baseline_week2_saliva.png", plot = baseline_week2_saliva_p, dpi = 300, 
+       units = "cm", width = 50, height = 30)
+```
+
+# Week 2 vs week 4 in supragingival plaque
+```{r extract rows beloning to pathway}
+tax_phylo <- pw_mia_strat %>% 
+  subset_samples(Sample == "Plaque" & 
+                 Time_new %in% c("Week 2", "Week 4")) %>% 
+  subset_taxa(pathway_name %in% c("nitrate Red. V (assimilatory)", "L-lysine Bios. II", 
+                                  "pyrimidine deoxyriboNucleot. de novo Bios. IV", "adenine and adenosine salvage III", 
+                                  "SPWY. of 5-aminoimidazole ribonucleotide Bios.", "5-aminoimidazole ribonucleotide Bios. II"))
+
+# Extract taxonomy
+tax <- as.data.frame(tax_table(tax_phylo))
+tax$Genus[is.na(tax$Genus) | tax$Genus %in% c("", "NA", "unclassified", "Unclassified", "g__")] <- "Unclassified"
+tax$feature <- rownames(tax)
+
+# Extract OTU
+otu <- as.data.frame(otu_table(tax_phylo)) 
+otu$feature <- rownames(otu)
+
+df <- left_join(otu, tax, by = "feature")
+
+otu_genus <- df %>%
+  mutate(Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus)) %>%
+  group_by(pathway_id, pathway_name, Genus, Superclass2) %>%
+  summarise(across(where(is.numeric), sum), .groups = "drop")
+
+# Extract metadata
+meta <- as.data.frame(sample_data(tax_phylo))
+
+meta <- structure(
+  meta,
+  class = "data.frame",
+  row.names = rownames(meta)
+)
+
+meta$SampleID <- rownames(meta)
+```
+
+```{r calculate species richness per sample}
+richness_long <- df %>%
+  pivot_longer(cols = starts_with("S_"), names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(meta, by = "SampleID") %>%
+  filter(Abundance > 0) %>%   # only species that are present
+  group_by(pathway_name, Superclass2, Time_new, Genus, Sample) %>%
+  summarise(n_species = n_distinct(Species),.groups = "drop")
+
+richness_long <- richness_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+richness_legend_levels <- c(setdiff(levels(richness_long$Genus), "Unclassified"), "Unclassified")
+
+richness_long <- richness_long %>%
+  mutate(Genera = factor(Genus, levels = richness_legend_levels))
+```
+
+```{r}
+richness_df <- richness_long %>%
+  filter(Group == "Classified") %>%
+  distinct(pathway_name, Superclass2, Sample, Time_new, Genus, n_species)
+
+richness_p <- ggplot(richness_df, aes(x = Time_new, y = n_species)) +
+  geom_boxplot(width = 0.6) + facet_nested(~ Sample + Superclass2 + pathway_name, scales = "free_x", space = "free_x") +
+  labs(y = "Species richness", x = NULL) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"))
+
+richness_p
+```
+
+```{r OTU}
+otu_long <- otu_genus %>%
+  pivot_longer(
+    cols = starts_with("S_"),
+    names_to = "SampleID",
+    values_to = "Abundance"
+  ) %>%
+  left_join(meta, by = "SampleID") %>%
+  mutate(
+    Genus = trimws(Genus),
+    Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus),
+    Genus = factor(Genus)
+  ) %>%
+  group_by(pathway_name, Sample, Time_new, Genus, Superclass2) %>%
+  summarise(
+    Abundance = mean(Abundance, na.rm = TRUE),
+    .groups = "drop")
+
+otu_long <- otu_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+legend_levels <- c(setdiff(levels(otu_long$Genus), "Unclassified"),
+                   "Unclassified")
+
+otu_long <- otu_long %>%
+  mutate(Genera = factor(Genus, levels = legend_levels))
+```
+
+```{r create color palette}
+all_genus <- unique(as.character(otu_long$Genus))
+
+other <- setdiff(all_genus, "Unclassified")
+
+fill_colors <- c("Unclassified" = "#DF8F4499", setNames(viridis::viridis(length(setdiff(unique(otu_long$Genus), "Unclassified")), option = "turbo"), setdiff(unique(otu_long$Genus), "Unclassified")))
+```
+
+```{r}
+week2_week4_plaque_p <- ggplot(
+  otu_long,
+  aes(x = Time_new, y = Abundance, fill = Genera)) +
+  geom_col(colour = "white", linewidth = 0.1) +
+  facet_nested(Group ~ Sample + Superclass2 + pathway_name, scales = "free_x", space = "free_x") + 
+  scale_fill_manual(values = fill_colors, drop = FALSE) + 
+  labs(x = "Time point", y = "Average genus contribution to pathway") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"), 
+        legend.position = "bottom") + guides(fill = guide_legend(reverse = FALSE, nrow = 5))
+
+week2_week4_plaque_p
+```
+
+```{r}
+week2_week4_plaque_p <- richness_p/week2_week4_plaque_p +
+  plot_layout(heights = c(1, 4))
+
+week2_week4_plaque_p
+
+ggsave("/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/08_tax_contribution/08_plots/week2_week4_plaque.png", plot = week2_week4_plaque_p, dpi = 300, 
+       units = "cm", width = 60, height = 30)
+```
+
+# Week 2 vs week 4 in saliva
+```{r extract rows beloning to pathway}
+tax_phylo <- pw_mia_strat %>% 
+  subset_samples(Sample == "Saliva" & 
+                 Time_new %in% c("Week 2", "Week 4")) %>% 
+  subset_taxa(pathway_name %in% c("adenine and adenosine salvage III", "inosine-5'-phosphate Bios. I", 
+                                  "inosine-5'-phosphate Bios. II", "inosine-5'-phosphate Bios. III", 
+                                  "SPWY. of purine deoxyriboNucleos. Degrad.", "SPWY. of purine nucleotide salvage", 
+                                  "5-aminoimidazole ribonucleotide Bios. I", "L-cysteine Bios. VI (from L-methionine)", 
+                                  "L-lysine Bios. II", "L-methionine Bios. II", "L-tryptophan Bios.", 
+                                  "SPWY. of L-isoleucine Bios. I", "SPWY. of L-phenylalanine Bios.", 
+                                  "SPWY. of L-tryptophan Bios.", "SPWY. of L-tyrosine Bios."))
+
+# Extract taxonomy
+tax <- as.data.frame(tax_table(tax_phylo))
+tax$Genus[is.na(tax$Genus) | tax$Genus %in% c("", "NA", "unclassified", "Unclassified", "g__")] <- "Unclassified"
+tax$feature <- rownames(tax)
+
+# Extract OTU
+otu <- as.data.frame(otu_table(tax_phylo)) 
+otu$feature <- rownames(otu)
+
+df <- left_join(otu, tax, by = "feature")
+
+otu_genus <- df %>%
+  mutate(Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus)) %>%
+  group_by(pathway_id, pathway_name, Genus, Superclass2) %>%
+  summarise(across(where(is.numeric), sum), .groups = "drop")
+
+# Extract metadata
+meta <- as.data.frame(sample_data(tax_phylo))
+
+meta <- structure(
+  meta,
+  class = "data.frame",
+  row.names = rownames(meta)
+)
+
+meta$SampleID <- rownames(meta)
+```
+
+```{r}
+pathway_labeller <- labeller(pathway_name = c(
+                                  "adenine and adenosine salvage III" = "adenine and \nadenosine salvage III", 
+                                  "inosine-5'-phosphate Bios. I" = "inosine-5'-phosphate \nBios. I", 
+                                  "inosine-5'-phosphate Bios. II" = "inosine-5'-phosphate \nBios. II", 
+                                  "inosine-5'-phosphate Bios. III" = "inosine-5'-phosphate \nBios. III", 
+                                  "SPWY. of purine deoxyriboNucleos. Degrad." = "SPWY. of purine \ndeoxyriboNucleos. \nDegrad.", 
+                                  "SPWY. of purine nucleotide salvage" = "SPWY. of purine \nnucleotide salvage", 
+                                  "5-aminoimidazole ribonucleotide Bios. I" = "5-aminoimidazole \nribonucleotide Bios. I", 
+                                  "L-cysteine Bios. VI (from L-methionine)" = "L-cysteine Bios. VI \n(from L-methionine)", 
+                                  "L-lysine Bios. II" = "L-lysine Bios. II", 
+                                  "L-methionine Bios. II" = "L-methionine Bios. II", 
+                                  "L-tryptophan Bios." = "L-tryptophan Bios.", 
+                                  "SPWY. of L-isoleucine Bios. I" = "SPWY. of \nL-isoleucine Bios. I", 
+                                  "SPWY. of L-phenylalanine Bios." = "SPWY. of \nL-phenylalanine Bios.", 
+                                  "SPWY. of L-tryptophan Bios." = "SPWY. of \nL-tryptophan Bios.", 
+                                  "SPWY. of L-tyrosine Bios." = "SPWY. of \nL-tyrosine Bios."), 
+                             Superclass2 = c(
+                                  "Nucleoside and Nucleotide Degrad." = "Nucleoside and \nNucleotide Degrad."))
+```
+
+```{r calculate species richness per sample}
+richness_long <- df %>%
+  pivot_longer(cols = starts_with("S_"), names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(meta, by = "SampleID") %>%
+  filter(Abundance > 0) %>%   # only species that are present
+  group_by(pathway_name, Superclass2, Time_new, Genus, Sample) %>%
+  summarise(n_species = n_distinct(Species),.groups = "drop")
+
+richness_long <- richness_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+richness_legend_levels <- c(setdiff(levels(richness_long$Genus), "Unclassified"), "Unclassified")
+
+richness_long <- richness_long %>%
+  mutate(Genera = factor(Genus, levels = richness_legend_levels))
+```
+
+```{r}
+richness_df <- richness_long %>%
+  filter(Group == "Classified") %>%
+  distinct(pathway_name, Superclass2, Sample, Time_new, Genus, n_species)
+
+richness_p <- ggplot(richness_df, aes(x = Time_new, y = n_species)) +
+  geom_boxplot(width = 0.6) + facet_nested(~ Sample + Superclass2 + pathway_name, labeller = pathway_labeller, scales = "free_x", space = "free_x") +
+  labs(y = "Species richness", x = NULL) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"))
+
+richness_p
+```
+
+```{r OTU}
+otu_long <- otu_genus %>%
+  pivot_longer(
+    cols = starts_with("S_"),
+    names_to = "SampleID",
+    values_to = "Abundance"
+  ) %>%
+  left_join(meta, by = "SampleID") %>%
+  mutate(
+    Genus = trimws(Genus),
+    Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus),
+    Genus = factor(Genus)
+  ) %>%
+  group_by(pathway_name, Sample, Time_new, Genus, Superclass2) %>%
+  summarise(
+    Abundance = mean(Abundance, na.rm = TRUE),
+    .groups = "drop")
+
+otu_long <- otu_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+legend_levels <- c(setdiff(levels(otu_long$Genus), "Unclassified"),
+                   "Unclassified")
+
+otu_long <- otu_long %>%
+  mutate(Genera = factor(Genus, levels = legend_levels))
+```
+
+```{r create color palette}
+all_genus <- unique(as.character(otu_long$Genus))
+
+other <- setdiff(all_genus, "Unclassified")
+
+fill_colors <- c("Unclassified" = "#DF8F4499", setNames(viridis::viridis(length(setdiff(unique(otu_long$Genus), "Unclassified")), option = "turbo"), setdiff(unique(otu_long$Genus), "Unclassified")))
+```
+
+```{r}
+week2_week4_saliva_p <- ggplot(
+  otu_long,
+  aes(x = Time_new, y = Abundance, fill = Genera)) +
+  geom_col(colour = "white", linewidth = 0.1) +
+  facet_nested(Group ~ Sample + Superclass2 + pathway_name, labeller = pathway_labeller, scales = "free_x", space = "free_x") + 
+  scale_fill_manual(values = fill_colors, drop = FALSE) + 
+  labs(x = "Time point", y = "Average genus contribution to pathway") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"), 
+        legend.position = "bottom") + guides(fill = guide_legend(reverse = FALSE, nrow = 5))
+
+week2_week4_saliva_p
+```
+
+```{r}
+week2_week4_saliva_p <- richness_p/week2_week4_saliva_p +
+  plot_layout(heights = c(1, 4))
+
+week2_week4_saliva_p
+
+ggsave("/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/08_tax_contribution/08_plots/week2_week4_saliva.png", plot = week2_week4_saliva_p, dpi = 300, 
+       units = "cm", width = 60, height = 30)
+```
+
+# Baseline vs week 4 in saliva
+```{r extract rows beloning to pathway}
+tax_phylo <- pw_mia_strat %>% 
+  subset_samples(Sample == "Saliva" & 
+                 Time_new %in% c("Baseline", "Week 4")) %>% 
+  subset_taxa(pathway_name %in% c("ADP-L-glycero--beta--D-manno-heptose Bios.", "heme b Bios. I (aerobic)",
+                                  "heme b Bios. II (oxygen-independent)", "biotin Bios. II", 
+                                  "hexitol Ferm. to lactate, formate, ethanol and acetate", "glycogen Bios. I (from ADP-D-Glucose)", 
+                                  "glycogen Degrad. II", "glucose and glucose-1-phosphate Degrad.", "mevalonate pathway I (eukaryotes and bacteria)"))
+
+# Extract taxonomy
+tax <- as.data.frame(tax_table(tax_phylo))
+tax$Genus[is.na(tax$Genus) | tax$Genus %in% c("", "NA", "unclassified", "Unclassified", "g__")] <- "Unclassified"
+tax$feature <- rownames(tax)
+
+# Extract OTU
+otu <- as.data.frame(otu_table(tax_phylo)) 
+otu$feature <- rownames(otu)
+
+df <- left_join(otu, tax, by = "feature")
+
+otu_genus <- df %>%
+  mutate(Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus)) %>%
+  group_by(pathway_id, pathway_name, Genus, Superclass2) %>%
+  summarise(across(where(is.numeric), sum), .groups = "drop")
+
+# Extract metadata
+meta <- as.data.frame(sample_data(tax_phylo))
+
+meta <- structure(
+  meta,
+  class = "data.frame",
+  row.names = rownames(meta)
+)
+
+meta$SampleID <- rownames(meta)
+```
+
+```{r}
+pathway_labeller <- labeller(pathway_name = c(
+                                  "ADP-L-glycero--beta--D-manno-heptose Bios." = "ADP-L-glycero--beta--D-\nmanno-heptose Bios.", 
+                                  "heme b Bios. I (aerobic)" = "heme b Bios. I (aerobic)",
+                                  "heme b Bios. II (oxygen-independent)" = "heme b Bios. II \n(oxygen-independent)", 
+                                  "biotin Bios. II" = "biotin Bios. II", 
+                                  "hexitol Ferm. to lactate, formate, ethanol and acetate" = "hexitol Ferm. to lactate, \nformate, ethanol and acetate", 
+                                  "glycogen Bios. I (from ADP-D-Glucose)" = "glycogen Bios. I \n(from ADP-D-Glucose)", 
+                                  "glycogen Degrad. II" = "glycogen Degrad. II", 
+                                  "glucose and glucose-1-phosphate Degrad." = "glucose and \nglucose-1-phosphate Degrad.", 
+                                  "mevalonate pathway I (eukaryotes and bacteria)" = "mevalonate pathway I \n(eukaryotes and bacteria)"), 
+                             Superclass2 = c(
+                                  "Carb. Degrad.-Alcohol Degrad.-Ferm." = "Carb. Degrad.-Alcohol \nDegrad.-Ferm.", 
+                                  "Carb. Degrad.-Polymeric Comp. Degrad." = "Carb. Degrad.-Polymeric \nComp. Degrad."))
+```
+
+```{r calculate species richness per sample}
+richness_long <- df %>%
+  pivot_longer(cols = starts_with("S_"), names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(meta, by = "SampleID") %>%
+  filter(Abundance > 0) %>%   # only species that are present
+  group_by(pathway_name, Superclass2, Time_new, Genus, Sample) %>%
+  summarise(n_species = n_distinct(Species),.groups = "drop")
+
+richness_long <- richness_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+richness_legend_levels <- c(setdiff(levels(richness_long$Genus), "Unclassified"), "Unclassified")
+
+richness_long <- richness_long %>%
+  mutate(Genera = factor(Genus, levels = richness_legend_levels))
+```
+
+```{r}
+richness_df <- richness_long %>%
+  filter(Group == "Classified") %>%
+  distinct(pathway_name, Superclass2, Sample, Time_new, Genus, n_species)
+
+richness_p <- ggplot(richness_df, aes(x = Time_new, y = n_species)) +
+  geom_boxplot(width = 0.6) + facet_nested(~ Sample + Superclass2 + pathway_name, labeller = pathway_labeller, scales = "free_x", space = "free_x") +
+  labs(y = "Species richness", x = NULL) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"))
+
+richness_p
+```
+
+```{r OTU}
+otu_long <- otu_genus %>%
+  pivot_longer(
+    cols = starts_with("S_"),
+    names_to = "SampleID",
+    values_to = "Abundance"
+  ) %>%
+  left_join(meta, by = "SampleID") %>%
+  mutate(
+    Genus = trimws(Genus),
+    Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified", Genus),
+    Genus = factor(Genus)
+  ) %>%
+  group_by(pathway_name, Sample, Time_new, Genus, Superclass2) %>%
+  summarise(
+    Abundance = mean(Abundance, na.rm = TRUE),
+    .groups = "drop")
+
+otu_long <- otu_long %>%
+  mutate(Group = if_else(Genus == "Unclassified", "Unclassified","Classified"))
+
+legend_levels <- c(setdiff(levels(otu_long$Genus), "Unclassified"),
+                   "Unclassified")
+
+otu_long <- otu_long %>%
+  mutate(Genera = factor(Genus, levels = legend_levels))
+```
+
+```{r create color palette}
+all_genus <- unique(as.character(otu_long$Genus))
+
+other <- setdiff(all_genus, "Unclassified")
+
+fill_colors <- c("Unclassified" = "#DF8F4499", setNames(viridis::viridis(length(setdiff(unique(otu_long$Genus), "Unclassified")), option = "turbo"), setdiff(unique(otu_long$Genus), "Unclassified")))
+```
+
+```{r}
+baseline_week4_saliva_p <- ggplot(
+  otu_long,
+  aes(x = Time_new, y = Abundance, fill = Genera)) +
+  geom_col(colour = "white", linewidth = 0.1) +
+  facet_nested(Group ~ Sample + Superclass2 + pathway_name, labeller = pathway_labeller, scales = "free_x", space = "free_x") + 
+  scale_fill_manual(values = fill_colors, drop = FALSE) + 
+  labs(x = "Time point", y = "Average genus contribution to pathway") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5), strip.text = element_text(face = "bold"), 
+        legend.position = "bottom") + guides(fill = guide_legend(reverse = FALSE, nrow = 5))
+
+baseline_week4_saliva_p
+```
+
+```{r}
+baseline_week4_saliva_p <- richness_p/baseline_week4_saliva_p +
+  plot_layout(heights = c(1, 4))
+
+baseline_week4_saliva_p
+
+
+ggsave("/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/08_tax_contribution/08_plots/baseline_week4_saliva.png", plot = baseline_week4_saliva_p, dpi = 300, 
+       units = "cm", width = 50, height = 30)
+```
+
+```{r}
+sessionInfo()
+```
