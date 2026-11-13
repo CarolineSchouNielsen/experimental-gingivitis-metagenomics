@@ -1,5 +1,5 @@
 ---
-title: "Import of MetaPhlAn4 data and transformation to phyloseq object for published article"
+title: "Import of MetaPhlAn4 data and transformation to phyloseq object"
 subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
 author: "Caroline Schou Nielsen"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
@@ -113,10 +113,9 @@ dfdf %>%
 ```
 
 ```{r generate time color palette}
-# 3 colors = 3 time points
 ps_up %>% 
   generate_color_palette(var = "Time_new",
-                         pal = "jama",
+                         pal = c("#79AF97FF", "#DF8F44FF", "#00A1D5FF"), # pal = "jama",
                          print = TRUE) -> time_pal
 ```
 
