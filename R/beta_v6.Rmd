@@ -58,7 +58,6 @@ source(paste0(source_dir,"phyloseq_normalisation.R"))
 ```{r setup5}
 # Beta diversity parameters
 #source("https://raw.githubusercontent.com/fconstancias/KU_Caroline/refs/heads/main/code/functions/phyloseq_functions.R")
-#source("/Users/lnp524/Desktop/phyloseq_explore_beta_CSN.R")
 source("/Users/lnp524/Desktop/phyloseq_explore_beta_CSN_V2.R")
 
 # compute_plot_beta() 
