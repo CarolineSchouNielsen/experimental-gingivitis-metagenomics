@@ -1,5 +1,5 @@
 ---
-title: "Alpha diversity analyses for published article"
+title: "Alpha diversity analyses"
 subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
 author: "Caroline Schou Nielsen"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
