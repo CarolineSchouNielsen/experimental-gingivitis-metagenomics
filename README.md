@@ -1,14 +1,15 @@
 # experimental-gingivitis-metagenomics
-The complete R code for data analysis used in paper published with npj Biofilms and Microbiomes: Metagenomic characterization fo the supragingival and salivary microbiota during initiation and resolution of experimental gingivitis (DOI: 10.1038/s41522-026-01197-z)
+The complete R code for data analysis used in paper published with _npj Biofilms and Microbiomes_: Metagenomic characterization fo the supragingival and salivary microbiota during initiation and resolution of experimental gingivitis **(DOI: 10.1038/s41522-026-01197-z)**
 
 ## Repository purpose 
 
-This repository contains the workflow for taxonomic and functional profiling of microbiome data used in the study: 
+This repository contains the workflow for taxonomic and functional profiling of microbiota data used in the study: 
 
 * Importing **MetaPhlAn** and **HUMAnN** profiling datasets
 * Alpha-diversity analysis
 * Beta-diversity analysis
 * Differential abundance analysis using **MaAsLin3**
+* Genus-level contribution and species richness analyses of representative pathways 
 
 ## Short description of R-code (in order of execution) 
 
@@ -36,6 +37,13 @@ _File:_ `R/beta_v5.Rmd`
 * Statistical comparisons across sample type and timepoints
 
 **4. Differential abundance analysis** 
+
 _File:_ `R/DA_v2.Rmd`
 * Model setup using MaAsLin3
-* Identification of significantly associated species and pathways 
+* Identification of significantly associated species and pathways
+
+**5. Taxonomic contribution analysis**
+
+_File:_ `R/tax_contribution.Rmd`
+* Visualize raw mean genus contributions for representative pathways (divided into classified and unclassified genera)
+* Visualize the species richness for representative pathways (the number of species among classified genera contributing to each pathway)
