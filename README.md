@@ -47,3 +47,6 @@ _File:_ `R/DA_v2.Rmd`
 _File:_ `R/tax_contribution.Rmd`
 * Visualize raw mean genus contributions for representative pathways (divided into classified and unclassified genera)
 * Visualize the species richness for representative pathways (the number of species among classified genera contributing to each pathway)
+
+**Acknowledgements**
+Parts of the bioinformatics analyses were performed using R functions developed by Florentin Constancias, available at [fconstancias/KU_Caroline](https://github.com/fconstancias/KU_Caroline). These functions are distributed under the GNU General Public License v3.0 (GPL-3.0).
