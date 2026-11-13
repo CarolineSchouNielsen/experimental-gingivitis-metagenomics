@@ -1,5 +1,5 @@
 ---
-title: "Differential abundance analyses with MaAsLin3 for published article"
+title: "Differential abundance analyses with MaAsLin3"
 subtitle: "Metagenomic characterization of the supragingival plaque and salivary microbiotas during initiation and resolution of experimental gingivitis"
 author: "Caroline Schou Nielsen"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
@@ -110,7 +110,8 @@ source("https://raw.githubusercontent.com/fconstancias/KU_Caroline/refs/heads/ma
 # Not included in GitHub repo due to size
 # See README for data access information
 
-load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/R/07_metaphlan_to_phyloseq/01_data.Rdata"))
+#load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/07_metaphlan/R/07_metaphlan_to_phyloseq/01_data.Rdata"))
+load(here::here("/Users/lnp524/Desktop/01_data.Rdata"))
 
 # Quick control that data is right
 ps_up %>% 
@@ -124,7 +125,8 @@ ps_up %>%
 # Not included in GitHub repo due to size
 # See README for data access information
 
-load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/R/01_humann_data.Rdata"))
+#load(here::here("/Volumes/Groupdir/SUN-ODONT-PHD_projekt_Caroline/DATA_ADM/Trial2_analysis/08_humann/R/01_humann_data.Rdata"))
+load(here::here("/Users/lnp524/Desktop/01_humann_data.Rdata"))
 
 # Quick control that data is right
 pw_mia %>% 
@@ -159,7 +161,7 @@ ps_up %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Baseline_vs_week2_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_tax_saliva_tp12
@@ -183,7 +185,7 @@ ps_up %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time", 
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Week2_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Week2_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_tax_saliva_tp23
@@ -207,7 +209,7 @@ ps_up %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Saliva/Baseline_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_tax_saliva_tp13
@@ -231,7 +233,7 @@ ps_up %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time", 
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Baseline_vs_week2_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_summary_plot_first_n = 15,
@@ -256,7 +258,7 @@ ps_up %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Week2_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Week2_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_summary_plot_first_n = 1,
@@ -282,7 +284,7 @@ ps_up %>%
                           glom = "Genus",
                           taxa_rank = "Genus",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Week2_vs_week4_sre_genus", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Week2_vs_week4_sre_genus", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_summary_plot_first_n = 7,
@@ -307,7 +309,7 @@ ps_up %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time", 
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Taxonomy/Plaque/Baseline_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_tax_plaque_tp13
@@ -330,10 +332,12 @@ pw_mia %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time", 
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Baseline_vs_week2_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_pway_saliva_tp12
+
+
 ```
 
 ```{r lefse}
@@ -352,7 +356,7 @@ pw_mia %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Week2_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Week2_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_pway_saliva_tp23
@@ -374,11 +378,17 @@ pw_mia %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time", 
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Saliva/Baseline_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_pway_saliva_tp13
 ```
+
+```{r}
+
+```
+
+
 
 ```{r lefse}
 maaslin_pway_saliva_tp13$maaslin3$maaslin3_lefse_plot
@@ -396,7 +406,7 @@ pw_mia %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Baseline_vs_week2_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Baseline_vs_week2_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_pway_plaque_tp12
@@ -418,7 +428,7 @@ pw_mia %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Week2_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Week2_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_pway_plaque_tp23
@@ -440,7 +450,7 @@ pw_mia %>%
                           glom = "Species",
                           taxa_rank = "Species",
                           comp_group = "Time",  
-                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Baseline_vs_week4_sre", #Adjust output path upon replication
+                          masslin3_output_dir = "/Volumes/lnp524/PhD/Puplications/2025/Metagenomic_characterization/04_DA/Pathway/Plaque/Baseline_vs_week4_sre", 
                           maaslin3_lefse_plot = TRUE,
                           pvalue_cutoff = 0.05,
                           maaslin3_small_random_effects = TRUE) -> maaslin_pway_plaque_tp13
