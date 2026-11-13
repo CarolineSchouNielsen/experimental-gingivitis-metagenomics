@@ -1,5 +1,5 @@
 # experimental-gingivitis-metagenomics
-The complete R code for data analysis used in published paper: Metagenomic characterization fo the supragingival and salivary microbiota during initiation and resolution of experimental gingivitis
+The complete R code for data analysis used in paper published with npj Biofilms and Microbiomes: Metagenomic characterization fo the supragingival and salivary microbiota during initiation and resolution of experimental gingivitis (DOI: 10.1038/s41522-026-01197-z)
 
 ## Repository purpose 
 
